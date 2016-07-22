@@ -186,7 +186,28 @@ GetPropertyOperation(JSContext* cx, InterpreterFrame* fp, HandleScript script, j
 
     // Copy lval, because it might alias vp.
     RootedValue v(cx, lval);
-    return GetProperty(cx, v, name, vp);
+    bool err = GetProperty(cx, v, name, vp);
+    if (vp.isUndefined()) {
+        Sprinter pr(cx);
+        pr.init();
+        pr.printf("Access of ");
+        if (op == JSOP_CALLPROP) {
+            pr.printf("method ");
+        } else {
+            pr.printf("field ");
+        }
+        pr.putString(script->getName(pc));
+        pr.printf(" on type ");
+        if (v.isObject()) {
+            pr.printf("%s", JS_GetClass(&v.toObject())->name);
+        } else {
+            pr.putString(TypeOfOperation(v, cx->runtime()));
+        }
+        pr.printf("\r\n");
+        fprintf(stdout, "%s", pr.string());
+        fflush(stdout);
+    }
+    return err;
 }
 
 static inline bool
