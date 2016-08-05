@@ -163,12 +163,79 @@ js::Debug_CheckSelfHosted(JSContext* cx, HandleValue fun)
     // This is purely to police self-hosted code. There is no actual operation.
     return true;
 }
+
+// Gives the string name of an operator
 #define OP_NAME_CASE_MACRO(op,val,name,image,length,nuses,ndefs,format) case op: return name;
 const char* OpName(jsbytecode op) {
     switch (op) {
         FOR_EACH_OPCODE(OP_NAME_CASE_MACRO)
         default: return "";
     }
+}
+
+/* The column number returned by PCToLineNumber is approximate,
+ * and is sometimes a hundred characters away from the actual op.
+ * This is a modified version of PCToLineNumber which additionally
+ * returns the range (as an offset from columnp) in which the op
+ * corresponding to the pc can be found
+ */
+unsigned
+PCToLineNumberO(unsigned startLine, jssrcnote* notes, jsbytecode* code, jsbytecode* pc,
+                   unsigned* columnp, ptrdiff_t* offsetp)
+{
+    unsigned lineno = startLine;
+    unsigned column = 0;
+    bool found = false;
+    *offsetp = 0;
+
+    /*
+     * Walk through source notes accumulating their deltas, keeping track of
+     * line-number notes, until we pass the note for pc's offset within
+     * script->code.
+     */
+    ptrdiff_t offset = 0;
+    ptrdiff_t target = pc - code;
+    for (jssrcnote* sn = notes; !SN_IS_TERMINATOR(sn); sn = SN_NEXT(sn)) {
+        offset += SN_DELTA(sn);
+        SrcNoteType type = (SrcNoteType) SN_TYPE(sn);
+
+
+        if (found) {
+            // If we've already found it, wait for the next colspan
+            if (type == SRC_SETLINE || type == SRC_NEWLINE) {
+                // If this was the last colspan in the line,
+                // exit without setting e offset.
+                // (not sure what to set the offset to here)
+                break;
+            } else if (type == SRC_COLSPAN) {
+                ptrdiff_t colspan = SN_OFFSET_TO_COLSPAN(GetSrcNoteOffset(sn, 0));
+                *offsetp = colspan;
+                break;
+            }
+        } else {
+            if (offset > target) {
+                found = true;
+                continue;
+            }
+            if (type == SRC_SETLINE) {
+                lineno = unsigned(GetSrcNoteOffset(sn, 0));
+                column = 0;
+            } else if (type == SRC_NEWLINE) {
+                lineno++;
+                column = 0;
+            } else if (type == SRC_COLSPAN) {
+                ptrdiff_t colspan = SN_OFFSET_TO_COLSPAN(GetSrcNoteOffset(sn, 0));
+                MOZ_ASSERT(ptrdiff_t(column) + colspan >= 0);
+                column += colspan;
+            }
+        }
+
+    }
+
+    if (columnp)
+        *columnp = column;
+
+    return lineno;
 }
 
 static inline bool
@@ -198,6 +265,8 @@ GetPropertyOperation(JSContext* cx, InterpreterFrame* fp, HandleScript script, j
     RootedValue v(cx, lval);
     bool err = GetProperty(cx, v, name, vp);
     if (vp.isUndefined() && op != JSOP_CALLPROP) {
+        // If this is a property access that returns `undefined`, we may have feature
+        // detection going on
         Sprinter pr(cx);
         pr.init();
         pr.printf("{\"fieldname\": \"");
@@ -209,11 +278,70 @@ GetPropertyOperation(JSContext* cx, InterpreterFrame* fp, HandleScript script, j
             pr.putString(TypeOfOperation(v, cx->runtime()));
         }
         unsigned column, line;
-        line = PCToLineNumber(script->lineno(), script->notes(), script->code(), pc, &column);
-        pr.printf("\", \"op\": \"%s\", \"prev_op\": \"%s\", \"file\": \"%s\", \"line\": %d, \"col\": %d}",
-                  OpName(lastOp), OpName(secondLastOp), fp->script()->filename(), line, column);
-        // pr.printf(" with op %s and previous op %script at %s:%d:%d\r\n",
-        //           OpName(lastOp), OpName(secondLastOp), fp->script()->filename(), line, column);
+        ptrdiff_t span;
+        line = PCToLineNumberO(script->lineno(), script->notes(), script->code(), pc, &column, &span);
+
+        // Get a string corresponding to the snippet surrounding
+        // the operation
+        UncompressedSourceCache::AutoHoldEntry holder;
+        const char16_t* chars = script->scriptSource()->chars(cx, holder);
+        const char16_t* linestart;
+        unsigned int currentline = 0;
+        int linelen = -1;
+        auto length = script->scriptSource()->length();
+        // Iterate over chars till we find the current line,
+        // and store its length in linelen
+        for(unsigned long i = 0; i < length - 1 + column; i++) {
+            if (chars[i] == '\n') {
+                currentline++;
+                if (linelen >=0) {
+                    break;
+                }
+            }
+            if (linelen >= 0) {
+                linelen++;
+            }
+            if (currentline == line && linelen == -1) {
+                linestart = &chars[i+1];
+                linelen = 0;
+            }
+        }
+        // Take a snippet of 20 chars on either
+        // side of the operation
+        int start = column - 20;
+        int end = column;
+        if (span <= 0) {
+            end = end + 20;
+        } else {
+            // If we already know the colspan,
+            // just add that instead of approximating
+            end = end + span;
+        }
+        if (start < 0) {
+            start = 0;
+        }
+        if (end >= linelen) {
+            end = linelen - 1;
+        }
+        int sniplength = end - start;
+        if(sniplength < 0) {
+            sniplength = 0;
+        }
+        if (linelen < 0) {
+            linestart = u"not found";
+            start = 0;
+            sniplength = 9;
+        }
+        JSString* val =  NewStringCopyN<CanGC>(cx, linestart + start, sniplength);
+
+        // The operator names are less useful now that we have the snippets,
+        // but probably still could be used for better heuristics for filtering
+        // for feature detection
+        pr.printf("\", \"op\": \"%s\", \"prev_op\": \"%s\", \"file\": \"%s\", \"line\": %d, \"col\": %d, \"span\": %d, \"source\": \"",
+                  OpName(lastOp), OpName(secondLastOp), fp->script()->filename(), line, column, span);
+        pr.putString(val);
+        pr.printf("\"}");
+
         fprintf(stdout, "%s\r\n", pr.string());
         fflush(stdout);
     }

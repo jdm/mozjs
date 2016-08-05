@@ -2511,7 +2511,7 @@ js::GetPrototypeIfOrdinary(JSContext* cx, HandleObject obj, bool* isOrdinary,
 // immutable-prototype behavior is enforced; if it's false, behavior is not
 // enforced, and immutable-prototype bits stored on objects are completely
 // ignored.
-static const bool ImmutablePrototypesEnabled = false;
+static const bool ImmutablePrototypesEnabled = true;
 
 JS_FRIEND_API(bool)
 JS_ImmutablePrototypesEnabled()
