@@ -65,6 +65,9 @@ using mozilla::NumberEqualsInt32;
 using mozilla::PodCopy;
 using JS::ForOfIterator;
 
+static jsbytecode lastOp;
+static jsbytecode secondLastOp;
+
 template <bool Eq>
 static MOZ_ALWAYS_INLINE bool
 LooseEqualityOp(JSContext* cx, InterpreterRegs& regs)
@@ -160,6 +163,13 @@ js::Debug_CheckSelfHosted(JSContext* cx, HandleValue fun)
     // This is purely to police self-hosted code. There is no actual operation.
     return true;
 }
+#define OP_NAME_CASE_MACRO(op,val,name,image,length,nuses,ndefs,format) case op: return name;
+const char* OpName(jsbytecode op) {
+    switch (op) {
+        FOR_EACH_OPCODE(OP_NAME_CASE_MACRO)
+        default: return "";
+    }
+}
 
 static inline bool
 GetPropertyOperation(JSContext* cx, InterpreterFrame* fp, HandleScript script, jsbytecode* pc,
@@ -187,15 +197,10 @@ GetPropertyOperation(JSContext* cx, InterpreterFrame* fp, HandleScript script, j
     // Copy lval, because it might alias vp.
     RootedValue v(cx, lval);
     bool err = GetProperty(cx, v, name, vp);
-    if (vp.isUndefined()) {
+    if (vp.isUndefined() && op != JSOP_CALLPROP) {
         Sprinter pr(cx);
         pr.init();
-        pr.printf("Access of ");
-        if (op == JSOP_CALLPROP) {
-            pr.printf("method ");
-        } else {
-            pr.printf("field ");
-        }
+        pr.printf("Access of field ");
         pr.putString(script->getName(pc));
         pr.printf(" on type ");
         if (v.isObject()) {
@@ -203,7 +208,10 @@ GetPropertyOperation(JSContext* cx, InterpreterFrame* fp, HandleScript script, j
         } else {
             pr.putString(TypeOfOperation(v, cx->runtime()));
         }
-        pr.printf("\r\n");
+        unsigned column, line;
+        line = PCToLineNumber(script->lineno(), script->notes(), script->code(), pc, &column);
+        pr.printf(" with op %s and previous op %script at %s:%d:%d\r\n",
+                  OpName(lastOp), OpName(secondLastOp), fp->script()->filename(), line, column);
         fprintf(stdout, "%s", pr.string());
         fflush(stdout);
     }
@@ -1554,6 +1562,7 @@ template <>
 class ReservedRootedBase<Value> : public ValueOperations<ReservedRooted<Value>>
 {};
 
+
 static MOZ_NEVER_INLINE bool
 Interpret(JSContext* cx, RunState& state)
 {
@@ -1573,7 +1582,7 @@ Interpret(JSContext* cx, RunState& state)
 # define INTERPRETER_LOOP()
 # define CASE(OP)                 label_##OP:
 # define DEFAULT()                label_default:
-# define DISPATCH_TO(OP)          goto* addresses[(OP)]
+# define DISPATCH_TO(OP)          secondLastOp = lastOp; lastOp = (OP); goto* addresses[(OP)]
 
 # define LABEL(X)                 (&&label_##X)
 
@@ -1596,7 +1605,8 @@ Interpret(JSContext* cx, RunState& state)
 # define CASE(OP)                 case OP:
 # define DEFAULT()                default:
 # define DISPATCH_TO(OP)                                                      \
-    JS_BEGIN_MACRO                                                            \
+    JS_BEGIN_MACRO   
+        secondLastOp = lastOp; lastOp = (OP);                             \
         switchOp = (OP);                                                      \
         goto the_switch;                                                      \
     JS_END_MACRO
