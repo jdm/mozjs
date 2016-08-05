@@ -200,9 +200,9 @@ GetPropertyOperation(JSContext* cx, InterpreterFrame* fp, HandleScript script, j
     if (vp.isUndefined() && op != JSOP_CALLPROP) {
         Sprinter pr(cx);
         pr.init();
-        pr.printf("Access of field ");
+        pr.printf("{\"fieldname\": \"");
         pr.putString(script->getName(pc));
-        pr.printf(" on type ");
+        pr.printf("\", \"type\": \"");
         if (v.isObject()) {
             pr.printf("%s", JS_GetClass(&v.toObject())->name);
         } else {
@@ -210,9 +210,11 @@ GetPropertyOperation(JSContext* cx, InterpreterFrame* fp, HandleScript script, j
         }
         unsigned column, line;
         line = PCToLineNumber(script->lineno(), script->notes(), script->code(), pc, &column);
-        pr.printf(" with op %s and previous op %script at %s:%d:%d\r\n",
+        pr.printf("\", \"op\": \"%s\", \"prev_op\": \"%s\", \"file\": \"%s\", \"line\": %d, \"col\": %d}",
                   OpName(lastOp), OpName(secondLastOp), fp->script()->filename(), line, column);
-        fprintf(stdout, "%s", pr.string());
+        // pr.printf(" with op %s and previous op %script at %s:%d:%d\r\n",
+        //           OpName(lastOp), OpName(secondLastOp), fp->script()->filename(), line, column);
+        fprintf(stdout, "%s\r\n", pr.string());
         fflush(stdout);
     }
     return err;
