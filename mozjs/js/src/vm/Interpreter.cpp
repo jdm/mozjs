@@ -284,50 +284,54 @@ GetPropertyOperation(JSContext* cx, InterpreterFrame* fp, HandleScript script, j
         // Get a string corresponding to the snippet surrounding
         // the operation
         UncompressedSourceCache::AutoHoldEntry holder;
-        const char16_t* chars = script->scriptSource()->chars(cx, holder);
-        const char16_t* linestart;
-        unsigned int currentline = 0;
+        bool hasSourceData = script->scriptSource()->hasSourceData();
+        const char16_t* chars = hasSourceData ? script->scriptSource()->chars(cx, holder) : nullptr;
+        const char16_t* linestart = chars;
+        unsigned int currentline = script->lineno();
         int linelen = -1;
-        auto length = script->scriptSource()->length();
+        auto length = hasSourceData ? script->scriptSource()->length() : 0;
         // Iterate over chars till we find the current line,
         // and store its length in linelen
-        for(unsigned long i = 0; i < length - 1 + column; i++) {
+        for(unsigned long i = 0; length && i < length - 1 /*+ column)*/; i++) {
+            if (currentline == line) {
+                if (linelen == -1) {
+                    linelen = 0;
+                }
+                linelen++;
+            }
             if (chars[i] == '\n') {
-                currentline++;
                 if (linelen >=0) {
                     break;
                 }
-            }
-            if (linelen >= 0) {
-                linelen++;
-            }
-            if (currentline == line && linelen == -1) {
+                currentline++;
                 linestart = &chars[i+1];
-                linelen = 0;
             }
         }
         // Take a snippet of 20 chars on either
         // side of the operation
-        int start = column - 20;
+        unsigned start = column >= 20 ? column - 20 : 0;
         int end = column;
         if (span <= 0) {
+            printf("negative span???\n");
             end = end + 20;
         } else {
             // If we already know the colspan,
             // just add that instead of approximating
             end = end + span;
         }
-        if (start < 0) {
-            start = 0;
-        }
         if (end >= linelen) {
             end = linelen - 1;
         }
         int sniplength = end - start;
-        if(sniplength < 0) {
+        if (sniplength < 0) {
+            printf("negative snip???\n");
             sniplength = 0;
         }
-        if (linelen < 0) {
+        if (!hasSourceData) {
+            linestart = u"no source";
+            start = 0;
+            sniplength = 9;            
+        } else if (linelen < 0) {
             linestart = u"not found";
             start = 0;
             sniplength = 9;
