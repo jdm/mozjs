@@ -1,4 +1,4 @@
-This repository contains Rust bindings for [SpiderMonkey][sm] for use with
+ This repository contains Rust bindings for [SpiderMonkey][sm] for use with
 [Servo][s].
 
 [sm]: https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey
