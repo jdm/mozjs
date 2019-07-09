@@ -38,9 +38,8 @@ environment:
   CXX: "clang-cl.exe"
 
   matrix:
-    - TARGET: i686-pc-windows-msvc
-      CROSS_COMPILE: 1
     - TARGET: x86_64-pc-windows-msvc
+      RUSTFLAGS: -Z pre-link-arg=/MTd
 
 # Uncomment to enable RDP & wait for exit.  Connection info will be printed in the log.
 #init:
@@ -68,4 +67,4 @@ build_script:
   - echo MOZTOOLS_PATH %MOZTOOLS_PATH%
   - cd %APPVEYOR_BUILD_FOLDER%
   - if "%CROSS_COMPILE%" == "" call "%VCVARSALL_PATH%\vcvars64.bat"
-  - cargo test --verbose --verbose --target %TARGET% --lib
+  - cargo test --features debugmozjs --verbose --verbose --target %TARGET% --lib
