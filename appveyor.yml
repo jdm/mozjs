@@ -39,7 +39,6 @@ environment:
 
   matrix:
     - TARGET: x86_64-pc-windows-msvc
-      RUSTFLAGS: -Z pre-link-arg=/MTd
 
 # Uncomment to enable RDP & wait for exit.  Connection info will be printed in the log.
 #init:
@@ -53,7 +52,7 @@ install:
   - ps: Start-FileDownload "http://servo-rust.s3.amazonaws.com/build/MozillaBuildSetup-2.2.0.exe"
   - ps: .\MozillaBuildSetup-2.2.0.exe /S | Out-Null
   - appveyor-retry appveyor DownloadFile https://win.rustup.rs/ -FileName rustup-init.exe
-  - rustup-init.exe -y --default-host=x86_64-pc-windows-msvc --default-toolchain nightly
+  - rustup-init.exe -y --default-host=x86_64-pc-windows-msvc
   - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin
   - if "%CROSS_COMPILE%" == "1" rustup target add %TARGET%
   - set MOZTOOLS_PATH=C:\mozilla-build\msys\bin;C:\mozilla-build\mozmake;C:\mozilla-build\yasm

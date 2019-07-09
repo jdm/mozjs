@@ -32,3 +32,6 @@ libz-sys = "1.0"
 [build-dependencies]
 bindgen = "0.49.0"
 cc = "1.0"
+
+[patch.crates-io]
+libc = { git = "https://github.com/jdm/libc", branch = "tmp" }
