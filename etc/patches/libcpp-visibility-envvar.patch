@@ -1,9 +1,9 @@
 diff --git a/mozjs/build/moz.configure/toolchain.configure b/mozjs/build/moz.configure/toolchain.configure
-index a1e443019..613ce94aa 100755
+index cf64d7bfd7..f1fc532353 100755
 --- a/mozjs/build/moz.configure/toolchain.configure
 +++ b/mozjs/build/moz.configure/toolchain.configure
-@@ -1199,8 +1199,14 @@ set_config('COLOR_CFLAGS', color_cflags)
- # hidden visibility.
+@@ -1319,8 +1319,14 @@ set_config('COLOR_CFLAGS', color_cflags)
+ # this setup.
  
  
 -@depends(c_compiler, target)
@@ -17,5 +17,5 @@ index a1e443019..613ce94aa 100755
 +    if len(value):
 +        return value[0]
      if c_compiler.type == 'clang' and target.os == 'Android':
-         return ''
- 
+         return namespace(
+             empty='',
