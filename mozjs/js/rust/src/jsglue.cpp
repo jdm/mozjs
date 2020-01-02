@@ -34,12 +34,12 @@ struct ProxyTraps {
                          JS::Handle<JS::PropertyDescriptor> desc,
                          JS::ObjectOpResult& result);
   bool (*ownPropertyKeys)(JSContext* cx, JS::HandleObject proxy,
-                          JS::AutoIdVector& props);
+                          JS::MutableHandleIdVector props);
   bool (*delete_)(JSContext* cx, JS::HandleObject proxy, JS::HandleId id,
                   JS::ObjectOpResult& result);
 
   bool (*enumerate)(JSContext* cx, JS::HandleObject proxy,
-                    JS::AutoIdVector& props);
+                    JS::MutableHandleIdVector props);
 
   bool (*getPrototypeIfOrdinary)(JSContext* cx, JS::HandleObject proxy,
                                  bool* isOrdinary,
@@ -67,7 +67,7 @@ struct ProxyTraps {
   bool (*hasOwn)(JSContext* cx, JS::HandleObject proxy, JS::HandleId id,
                  bool* bp);
   bool (*getOwnEnumerablePropertyKeys)(JSContext* cx, JS::HandleObject proxy,
-                                       JS::AutoIdVector& props);
+                                       JS::MutableHandleIdVector props);
   bool (*nativeCall)(JSContext* cx, JS::IsAcceptableThis test,
                      JS::NativeImpl impl, JS::CallArgs args);
   bool (*hasInstance)(JSContext* cx, JS::HandleObject proxy,
@@ -101,7 +101,7 @@ static int HandlerFamily;
                                                                               \
   /* Standard internal methods. */                                            \
   virtual bool enumerate(JSContext* cx, JS::HandleObject proxy,               \
-                         JS::AutoIdVector& props) const override {            \
+                         JS::MutableHandleIdVector props) const override {    \
     return mTraps.enumerate ? mTraps.enumerate(cx, proxy, props)              \
                             : _base::enumerate(cx, proxy, props);             \
   }                                                                           \
@@ -146,7 +146,7 @@ static int HandlerFamily;
   }                                                                           \
                                                                               \
   virtual bool getOwnEnumerablePropertyKeys(                                  \
-      JSContext* cx, JS::HandleObject proxy, JS::AutoIdVector& props)         \
+      JSContext* cx, JS::HandleObject proxy, JS::MutableHandleIdVector props) \
       const override {                                                        \
     return mTraps.getOwnEnumerablePropertyKeys                                \
                ? mTraps.getOwnEnumerablePropertyKeys(cx, proxy, props)        \
@@ -240,7 +240,7 @@ class WrapperProxyHandler : public js::Wrapper {
   }
 
   virtual bool ownPropertyKeys(JSContext* cx, JS::HandleObject proxy,
-                               JS::AutoIdVector& props) const override {
+                               JS::MutableHandleIdVector props) const override {
     return mTraps.ownPropertyKeys
                ? mTraps.ownPropertyKeys(cx, proxy, props)
                : js::Wrapper::ownPropertyKeys(cx, proxy, props);
@@ -287,6 +287,8 @@ class RustJSPrincipal : public JSPrincipals {
     if (this->destroyCallback) this->destroyCallback(this);
   }
 
+  bool isSystemOrAddonPrincipal() { return false; }
+
   bool write(JSContext* cx, JSStructuredCloneWriter* writer) {
     return this->writeCallback ? this->writeCallback(cx, writer) : false;
   }
@@ -322,7 +324,7 @@ class ForwardingProxyHandler : public js::BaseProxyHandler {
   }
 
   virtual bool ownPropertyKeys(JSContext* cx, JS::HandleObject proxy,
-                               JS::AutoIdVector& props) const override {
+                               JS::MutableHandleIdVector props) const override {
     return mTraps.ownPropertyKeys(cx, proxy, props);
   }
 
@@ -420,15 +422,26 @@ const void* GetSecurityWrapper() {
   return &js::CrossCompartmentSecurityWrapper::singleton;
 }
 
-JS::ReadOnlyCompileOptions* NewCompileOptions(JSContext* aCx, const char* aFile,
-                                              unsigned aLine) {
-  JS::OwningCompileOptions* opts = new JS::OwningCompileOptions(aCx);
-  opts->setFileAndLine(aCx, aFile, aLine);
-  return opts;
-}
-
 void DeleteCompileOptions(JS::ReadOnlyCompileOptions* aOpts) {
   delete static_cast<JS::OwningCompileOptions*>(aOpts);
+}
+
+JS::ReadOnlyCompileOptions* NewCompileOptions(JSContext* aCx, const char* aFile,
+                                              unsigned aLine) {
+  JS::CompileOptions opts(aCx);
+  opts.setFileAndLine(aFile, aLine);
+
+  JS::OwningCompileOptions* owned = new JS::OwningCompileOptions(aCx);
+  if (!owned) {
+    return nullptr;
+  }
+
+  if (!owned->copy(aCx, opts)) {
+    DeleteCompileOptions(owned);
+    return nullptr;
+  }
+
+  return owned;
 }
 
 JSObject* NewProxyObject(JSContext* aCx, const void* aHandler,
@@ -445,16 +458,16 @@ JSObject* WrapperNew(JSContext* aCx, JS::HandleObject aObj,
                      bool aSingleton) {
   js::WrapperOptions options;
   if (aClass) {
-    options.setClass(js::Valueify(aClass));
+    options.setClass(aClass);
   }
   options.setSingleton(aSingleton);
   return js::Wrapper::New(aCx, aObj, (const js::Wrapper*)aHandler, options);
 }
 
-const js::Class WindowProxyClass = PROXY_CLASS_DEF(
+const JSClass WindowProxyClass = PROXY_CLASS_DEF(
     "Proxy", JSCLASS_HAS_RESERVED_SLOTS(1)); /* additional class flags */
 
-const js::Class* GetWindowProxyClass() { return &WindowProxyClass; }
+const JSClass* GetWindowProxyClass() { return &WindowProxyClass; }
 
 JS::Value GetProxyReservedSlot(JSObject* obj, uint32_t slot) {
   return js::GetProxyReservedSlot(obj, slot);
@@ -466,7 +479,7 @@ void SetProxyReservedSlot(JSObject* obj, uint32_t slot, const JS::Value* val) {
 
 JSObject* NewWindowProxy(JSContext* aCx, JS::HandleObject aObj,
                          const void* aHandler) {
-  return WrapperNew(aCx, aObj, aHandler, Jsvalify(&WindowProxyClass), true);
+  return WrapperNew(aCx, aObj, aHandler, &WindowProxyClass, true);
 }
 
 JS::Value GetProxyPrivate(JSObject* obj) { return js::GetProxyPrivate(obj); }
@@ -538,31 +551,39 @@ JSObject* UncheckedUnwrapObject(JSObject* obj, bool stopAtOuter) {
   return js::UncheckedUnwrap(obj, stopAtOuter);
 }
 
-JS::AutoIdVector* CreateAutoIdVector(JSContext* cx) {
-  return new JS::AutoIdVector(cx);
+JS::PersistentRootedIdVector* CreateRootedIdVector(JSContext* cx) {
+  return new JS::PersistentRootedIdVector(cx);
 }
 
-bool AppendToAutoIdVector(JS::AutoIdVector* v, jsid id) {
+bool AppendToRootedIdVector(JS::PersistentRootedIdVector* v, jsid id) {
   return v->append(id);
 }
 
-const jsid* SliceAutoIdVector(const JS::AutoIdVector* v, size_t* length) {
+const jsid* SliceRootedIdVector(const JS::PersistentRootedIdVector* v,
+                                size_t* length) {
   *length = v->length();
   return v->begin();
 }
 
-void DestroyAutoIdVector(JS::AutoIdVector* v) { delete v; }
+void DestroyRootedIdVector(JS::PersistentRootedIdVector* v) { delete v; }
 
-JS::AutoObjectVector* CreateAutoObjectVector(JSContext* aCx) {
-  JS::AutoObjectVector* vec = new JS::AutoObjectVector(aCx);
+JS::MutableHandleIdVector GetMutableHandleIdVector(
+    JS::PersistentRootedIdVector* v) {
+  return JS::MutableHandleIdVector(v);
+}
+
+JS::PersistentRootedObjectVector* CreateRootedObjectVector(JSContext* aCx) {
+  JS::PersistentRootedObjectVector* vec =
+      new JS::PersistentRootedObjectVector(aCx);
   return vec;
 }
 
-bool AppendToAutoObjectVector(JS::AutoObjectVector* v, JSObject* obj) {
+bool AppendToRootedObjectVector(JS::PersistentRootedObjectVector* v,
+                                JSObject* obj) {
   return v->append(obj);
 }
 
-void DeleteAutoObjectVector(JS::AutoObjectVector* v) { delete v; }
+void DeleteRootedObjectVector(JS::PersistentRootedObjectVector* v) { delete v; }
 
 #if defined(__linux__)
 #  include <malloc.h>
