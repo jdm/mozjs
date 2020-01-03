@@ -100,7 +100,7 @@ def main(args):
     for arg in args:
         if arg == "--no-remove":
             remove = False
-        if arg == "--no-patch":
+        elif arg == "--no-patch":
             patch = False
         elif arg == "--no-configure":
             configure = False
