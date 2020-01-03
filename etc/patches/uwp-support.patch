@@ -4,48 +4,6 @@ Date:   Wed Sep 11 11:06:52 2019 -0400
 
     Add cargo feature to build with UWP support.
 
-diff --git a/Cargo.toml b/Cargo.toml
-index 36a0c40ff..a9484ea30 100644
---- a/Cargo.toml
-+++ b/Cargo.toml
-@@ -18,6 +18,7 @@ exclude = [
- [features]
- debugmozjs = []
- profilemozjs = []
-+uwp = []
- 
- [lib]
- name = "mozjs_sys"
-diff --git a/build.rs b/build.rs
-index 4c69e3eb1..eb3feb1a3 100644
---- a/build.rs
-+++ b/build.rs
-@@ -120,6 +120,9 @@ fn build_jsapi() {
-         if target.contains("gnu") {
-             println!("cargo:rustc-link-lib=stdc++");
-         }
-+        if cfg!(feature = "uwp") {
-+            println!("cargo:rustc-link-lib=mincore");
-+        }
-     } else if target.contains("apple") || target.contains("freebsd") {
-         println!("cargo:rustc-link-lib=c++");
-     } else {
-diff --git a/makefile.cargo b/makefile.cargo
-index a2477aa6c..3515feb98 100644
---- a/makefile.cargo
-+++ b/makefile.cargo
-@@ -17,6 +17,11 @@ ifeq (windows,$(findstring windows,$(TARGET)))
- 	CFLAGS += -MD
- 	CXXFLAGS += -MD
- 	CONFIGURE_FLAGS += --with-visual-studio-version=2017
-+	ifneq (,$(CARGO_FEATURE_UWP))
-+		CONFIGURE_FLAGS += --enable-uwp --without-intl-api
-+		CFLAGS += -DWINAPI_FAMILY=WINAPI_FAMILY_APP
-+		CXXFLAGS += -DWINAPI_FAMILY=WINAPI_FAMILY_APP
-+	endif
- else
- 	WINDOWS :=
- endif
 diff --git a/mozjs/config/external/icu/common/moz.build b/mozjs/config/external/icu/common/moz.build
 index 61ff5dc72..9dfbf9cb7 100644
 --- a/mozjs/config/external/icu/common/moz.build
@@ -81,7 +39,7 @@ index cebfbbeb8..5d99f7155 100644
 +
  # SpiderMonkey as a shared library, and how its symbols are exported
  # ==================================================================
- js_option('--disable-shared-js', default=building_js,
+ js_option('--disable-shared-js', when=js_standalone,
 diff --git a/mozjs/js/src/builtin/TestingFunctions.cpp b/mozjs/js/src/builtin/TestingFunctions.cpp
 index 15739b848..a38133a12 100644
 --- a/mozjs/js/src/builtin/TestingFunctions.cpp
@@ -305,32 +263,12 @@ index 15a9b66a6..d07c10ea6 100644
  #  include <unistd.h>
  #endif
  
-diff --git a/mozjs/js/src/vm/DateTime.cpp b/mozjs/js/src/vm/DateTime.cpp
-index a66697de9..c4c2c1f86 100644
---- a/mozjs/js/src/vm/DateTime.cpp
-+++ b/mozjs/js/src/vm/DateTime.cpp
-@@ -740,6 +740,7 @@ void js::ResyncICUDefaultTimeZone() {
-   if (guard.get() == IcuTimeZoneStatus::NeedsUpdate) {
-     bool recreate = true;
- 
-+#ifndef JS_ENABLE_UWP
-     if (const char* tz = std::getenv("TZ")) {
-       icu::UnicodeString tzid;
- 
-@@ -777,6 +778,7 @@ void js::ResyncICUDefaultTimeZone() {
-         }
-       }
-     }
-+#endif /* JS_ENABLE_UWP */
- 
-     if (recreate) {
-       icu::TimeZone::recreateDefault();
 diff --git a/mozjs/js/src/vm/Time.cpp b/mozjs/js/src/vm/Time.cpp
 index 19ee15009..0a70bd8c0 100644
 --- a/mozjs/js/src/vm/Time.cpp
 +++ b/mozjs/js/src/vm/Time.cpp
 @@ -21,6 +21,9 @@
- #include "jsutil.h"
+ #include "jstypes.h"
  
  #ifdef XP_WIN
 +#ifdef JS_ENABLE_UWP
@@ -483,25 +421,21 @@ index 2058abc0f..5a2876429 100644
 +
  #endif /* mozilla_WindowsVersion_h */
 diff --git a/mozjs/mozglue/misc/DynamicallyLinkedFunctionPtr.h b/mozjs/mozglue/misc/DynamicallyLinkedFunctionPtr.h
-index 24ac56c38..89533a484 100644
+index dbf84c0117..04e0444e81 100644
 --- a/mozjs/mozglue/misc/DynamicallyLinkedFunctionPtr.h
 +++ b/mozjs/mozglue/misc/DynamicallyLinkedFunctionPtr.h
-@@ -22,6 +22,7 @@ class DynamicallyLinkedFunctionPtr<R(__stdcall*)(Args...)> {
-  public:
-   DynamicallyLinkedFunctionPtr(const wchar_t* aLibName, const char* aFuncName)
-       : mModule(NULL), mFunction(nullptr) {
+@@ -46,7 +46,11 @@ class DynamicallyLinkedFunctionPtrBase {
+
+   DynamicallyLinkedFunctionPtrBase(const wchar_t* aLibName,
+                                    const char* aFuncName)
 +#ifndef JS_ENABLE_UWP
-     mModule = ::LoadLibraryW(aLibName);
-     if (mModule) {
-       mFunction =
-@@ -34,6 +35,7 @@ class DynamicallyLinkedFunctionPtr<R(__stdcall*)(Args...)> {
-         mModule = NULL;
-       }
-     }
+       : mModule(::LoadLibraryW(aLibName)), mFunction(nullptr) {
++#else
++      : mModule(nullptr), mFunction(nullptr)
 +#endif
-   }
- 
-   DynamicallyLinkedFunctionPtr(const DynamicallyLinkedFunctionPtr&) = delete;
+     if (!mModule) {
+       return;
+     }
 diff --git a/mozjs/mozglue/misc/StackWalk.cpp b/mozjs/mozglue/misc/StackWalk.cpp
 index 3862e083c..8894a3ef2 100644
 --- a/mozjs/mozglue/misc/StackWalk.cpp
@@ -621,25 +555,25 @@ index 3e4552d7a..b3e6f3dd1 100644
    LOG(("TimeStamp: timeIncrement=%d [100ns]", timeIncrement));
  
 diff --git a/mozjs/mozglue/misc/WindowsMapRemoteView.cpp b/mozjs/mozglue/misc/WindowsMapRemoteView.cpp
-index 6c4b02455..1bf4f3bd7 100644
+index 4cd60ba7f1..7f39e78593 100644
 --- a/mozjs/mozglue/misc/WindowsMapRemoteView.cpp
 +++ b/mozjs/mozglue/misc/WindowsMapRemoteView.cpp
 @@ -29,6 +29,7 @@ WINBASEAPI BOOL WINAPI UnmapViewOfFile2(HANDLE aProcess, PVOID aBaseAddress,
- 
+
  enum SECTION_INHERIT { ViewShare = 1, ViewUnmap = 2 };
- 
+
 +#ifndef JS_ENABLE_UWP
  NTSTATUS NTAPI NtMapViewOfSection(
      HANDLE aSection, HANDLE aProcess, PVOID* aBaseAddress, ULONG_PTR aZeroBits,
      SIZE_T aCommitSize, PLARGE_INTEGER aSectionOffset, PSIZE_T aViewSize,
 @@ -49,6 +50,7 @@ static DWORD GetWin32ErrorCode(NTSTATUS aNtStatus) {
- 
+
    return pRtlNtStatusToDosError(aNtStatus);
  }
 +#endif
- 
+
  namespace mozilla {
- 
+
 @@ -56,6 +58,9 @@ MFBT_API void* MapRemoteViewOfFile(HANDLE aFileMapping, HANDLE aProcess,
                                     ULONG64 aOffset, PVOID aBaseAddress,
                                     SIZE_T aViewSize, ULONG aAllocationType,
@@ -647,28 +581,28 @@ index 6c4b02455..1bf4f3bd7 100644
 +#ifdef JS_ENABLE_UWP
 +  return false;
 +#else
-   static const DynamicallyLinkedFunctionPtr<decltype(&MapViewOfFileNuma2)>
+   static const StaticDynamicallyLinkedFunctionPtr<decltype(&MapViewOfFileNuma2)>
        pMapViewOfFileNuma2(L"Api-ms-win-core-memory-l1-1-5.dll",
                            "MapViewOfFileNuma2");
 @@ -97,9 +102,13 @@ MFBT_API void* MapRemoteViewOfFile(HANDLE aFileMapping, HANDLE aProcess,
- 
+
    ::SetLastError(GetWin32ErrorCode(ntStatus));
    return nullptr;
 +#endif
  }
- 
+
  MFBT_API bool UnmapRemoteViewOfFile(HANDLE aProcess, PVOID aBaseAddress) {
 +#ifdef JS_ENABLE_UWP
 +  return false;
 +#else
-   static const DynamicallyLinkedFunctionPtr<decltype(&UnmapViewOfFile2)>
+   static const StaticDynamicallyLinkedFunctionPtr<decltype(&UnmapViewOfFile2)>
        pUnmapViewOfFile2(L"kernel32.dll", "UnmapViewOfFile2");
- 
-@@ -118,6 +127,7 @@ MFBT_API bool UnmapRemoteViewOfFile(HANDLE aProcess, PVOID aBaseAddress) {
+
+@@ -119,6 +128,7 @@ MFBT_API bool UnmapRemoteViewOfFile(HANDLE aProcess, PVOID aBaseAddress) {
    NTSTATUS ntStatus = pNtUnmapViewOfSection(aProcess, aBaseAddress);
    ::SetLastError(GetWin32ErrorCode(ntStatus));
    return NT_SUCCESS(ntStatus);
 +#endif
  }
- 
+
  }  // namespace mozilla
