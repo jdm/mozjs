@@ -1,0 +1,17 @@
+diff --git a/mozjs/mfbt/moz.build b/mozjs/mfbt/moz.build
+index 62a8c0d991..759eb57916 100644
+--- a/mozjs/mfbt/moz.build
++++ b/mozjs/mfbt/moz.build
+@@ -9,9 +9,9 @@ with Files("**"):
+ 
+ Library('mfbt')
+ 
+-EXPORTS += [
+-    '../third_party/rust/encoding_c_mem/include/encoding_rs_mem.h',
+-]
++#EXPORTS += [
++#    '../third_party/rust/encoding_c_mem/include/encoding_rs_mem.h',
++#]
+ 
+ EXPORTS.mozilla = [
+     'Algorithm.h',
