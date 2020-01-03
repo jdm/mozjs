@@ -4,62 +4,51 @@ Date:   Wed Sep 11 11:09:10 2019 -0400
 
     Build changes to support new UWP rustc target.
 
-diff --git a/makefile.cargo b/makefile.cargo
-index ab2b8295e4..37005597e1 100644
---- a/makefile.cargo
-+++ b/makefile.cargo
-@@ -203,5 +203,6 @@ maybe-configure:
- 	  AS="$(AS)" AR="$(AR)" \
- 	  STLPORT_LIBS="$(STLPORT_LIBS)" \
- 	  RUST_TARGET="$(TARGET)" RUST_HOST="$(HOST)" \
-+	  RUST_SYSROOT="${RUST_SYSROOT}" \
- 	  $(JSSRC)/configure $(strip $(CONFIGURE_FLAGS)) || (cat config.log && exit 1) ; \
- 	fi
 diff --git a/mozjs/build/moz.configure/rust.configure b/mozjs/build/moz.configure/rust.configure
-index 6c129579e0..b75bf4a471 100644
+index 43a399bf3b..4824fad96a 100644
 --- a/mozjs/build/moz.configure/rust.configure
 +++ b/mozjs/build/moz.configure/rust.configure
-@@ -15,6 +15,12 @@ rustc = check_prog('RUSTC', ['rustc'], paths=toolchain_search_path,
- cargo = check_prog('CARGO', ['cargo'], paths=toolchain_search_path,
-                    input='CARGO', allow_missing=True)
- 
+@@ -17,6 +17,12 @@ cargo = check_prog('_CARGO', ['cargo'], what='cargo',
+                    paths=toolchain_search_path, input='CARGO',
+                    allow_missing=True)
+
 +option(env='RUST_SYSROOT', nargs=1, help='Path to the rustc sysroot')
 +
 +@depends('RUST_SYSROOT')
 +def rust_sysroot(value):
 +    if value:
 +        return value[0]
- 
- @depends_if(rustc)
- @checking('rustc version', lambda info: info.version)
-@@ -153,7 +159,7 @@ def rust_triple_alias(host_or_target, last_resort):
-     assert host_or_target in {host, target}
- 
-     @depends(rustc, host_or_target, c_compiler, rust_supported_targets,
--             last_resort, when=rust_compiler)
-+             last_resort, rust_sysroot, when=rust_compiler)
+
+ @template
+ def unwrap_rustup(prog, name):
+@@ -221,7 +227,7 @@ def rust_triple_alias(host_or_target, host_or_target_c_compiler):
+     host_or_target_str = {host: 'host', target: 'target'}[host_or_target]
+
+     @depends(rustc, host_or_target, host_or_target_c_compiler,
+-             rust_supported_targets, arm_target, when=rust_compiler)
++             rust_supported_targets, arm_target, rust_sysroot, when=rust_compiler)
+     @checking('for rust %s triplet' % host_or_target_str)
      @imports('os')
-     @imports('subprocess')
      @imports(_from='mozbuild.configure.util', _import='LineIO')
-@@ -161,7 +167,7 @@ def rust_triple_alias(host_or_target, last_resort):
+@@ -229,7 +235,7 @@ def rust_triple_alias(host_or_target, host_or_target_c_compiler):
      @imports(_from='tempfile', _import='mkstemp')
      @imports(_from='textwrap', _import='dedent')
      def rust_target(rustc, host_or_target, compiler_info,
--                    rust_supported_targets, last_resort):
-+                    rust_supported_targets, last_resort, rust_sysroot):
+-                    rust_supported_targets, arm_target):
++                    rust_supported_targets, arm_target, rust_sysroot):
          # Rust's --target options are similar to, but not exactly the same
          # as, the autoconf-derived targets we use.  An example would be that
          # Rust uses distinct target triples for targetting the GNU C++ ABI
-@@ -220,6 +226,8 @@ def rust_triple_alias(host_or_target, last_resort):
+@@ -370,6 +376,8 @@ def rust_triple_alias(host_or_target, host_or_target_c_compiler):
                  '-o', out_path,
                  in_path,
              ]
 +            if rust_sysroot:
 +                cmd += ['--sysroot', rust_sysroot]
- 
+
              def failed():
                  die(dedent('''\
-@@ -262,6 +270,8 @@ rust_host_triple = rust_triple_alias(host, rust_host)
+@@ -399,6 +407,8 @@ rust_host_triple = rust_triple_alias(host, host_c_compiler)
  @depends(host, rust_host_triple, rustc_info.host)
  def validate_rust_host_triple(host, rust_host, rustc_host):
      if rust_host != rustc_host:
@@ -68,7 +57,7 @@ index 6c129579e0..b75bf4a471 100644
          if host.alias == rust_host:
              configure_host = host.alias
          else:
-@@ -346,6 +356,8 @@ def rustc_natvis_ldflags(target, compiler_info, rustc):
+@@ -442,6 +452,8 @@ def rustc_natvis_ldflags(target, compiler_info, rustc):
      if target.kernel == 'WINNT' and compiler_info.type == 'clang-cl':
          sysroot = check_cmd_output(rustc, '--print', 'sysroot').strip()
          etc = os.path.join(sysroot, 'lib/rustlib/etc')
