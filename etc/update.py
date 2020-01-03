@@ -94,9 +94,12 @@ def generate_configure():
 
 def main(args):
     extract = None
+    remove = True
     patch = True
     configure = True
     for arg in args:
+        if arg == "--no-remove":
+            remove = False
         if arg == "--no-patch":
             patch = False
         elif arg == "--no-configure":
@@ -105,9 +108,10 @@ def main(args):
             extract = arg
     if extract:
         extract_tarball(os.path.abspath(extract))
-    if patch:
+    if remove:
         remove_cargo_tomls()
-        remove_third_party_rust()
+        remove_third_party_rust()        
+    if patch:
         apply_patches()
     if configure:
         generate_configure()
