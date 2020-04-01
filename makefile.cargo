@@ -110,6 +110,8 @@ endif
 
 ifneq (,$(CARGO_FEATURE_DEBUGMOZJS))
 	CONFIGURE_FLAGS += --enable-debug --disable-optimize --enable-gczeal
+else
+	CONFIGURE_FLAGS += --enable-optimize
 endif
 
 ifneq (,$(CARGO_FEATURE_PROFILEMOZJS))
