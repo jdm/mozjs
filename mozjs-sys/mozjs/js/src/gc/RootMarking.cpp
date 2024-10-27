@@ -56,7 +56,8 @@ static inline void TraceExactStackRootTraceableList(JSTracer* trc,
                                                     StackRootedBase* listHead,
                                                     const char* name) {
   for (StackRootedBase* root = listHead; root; root = root->previous()) {
-    static_cast<StackRootedTraceableBase*>(root)->trace(trc, name);
+    StackRootedTraceableBase* base = static_cast<StackRootedTraceableBase*>(root);
+    base->trace(trc, name);
   }
 }
 

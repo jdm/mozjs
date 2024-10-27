@@ -20,7 +20,7 @@ use crate::jsapi::JSPropertySpec_Kind;
 use crate::jsapi::JSPropertySpec_Name;
 use crate::jsapi::JS;
 use crate::jsapi::JS::Scalar::Type;
-use crate::jsgc::RootKind;
+use crate::jsgc::{RootKind, RootedBase};
 use crate::jsid::VoidId;
 use crate::jsval::UndefinedValue;
 
@@ -383,11 +383,14 @@ impl JSNativeWrapper {
     }
 }
 
-impl<T> JS::Rooted<T> {
+impl<T: RootKind> JS::Rooted<T> {
     pub fn new_unrooted() -> JS::Rooted<T> {
         JS::Rooted {
-            stack: ptr::null_mut(),
-            prev: ptr::null_mut(),
+            vtable: T::VTABLE,
+            base: RootedBase {
+                stack: ptr::null_mut(),
+                prev: ptr::null_mut(),
+            },
             ptr: unsafe { std::mem::zeroed() },
         }
     }
@@ -396,29 +399,25 @@ impl<T> JS::Rooted<T> {
         cx as *mut JS::RootingContext
     }
 
-    unsafe fn get_root_stack(cx: *mut JSContext) -> *mut *mut JS::Rooted<*mut c_void>
-    where
-        T: RootKind,
+    unsafe fn get_root_stack(cx: *mut JSContext) -> *mut *mut JS::Rooted<*mut JSObject>
     {
-        let kind = T::rootKind() as usize;
+        let kind = T::KIND as usize;
         let rooting_cx = Self::get_rooting_context(cx);
         &mut (*rooting_cx).stackRoots_[kind] as *mut _ as *mut _
     }
 
     pub unsafe fn add_to_root_stack(&mut self, cx: *mut JSContext)
-    where
-        T: RootKind,
     {
         let stack = Self::get_root_stack(cx);
-        self.stack = stack;
-        self.prev = *stack;
+        self.base.stack = stack;
+        self.base.prev = *stack;
 
         *stack = self as *mut _ as usize as _;
     }
 
     pub unsafe fn remove_from_root_stack(&mut self) {
-        assert!(*self.stack == self as *mut _ as usize as _);
-        *self.stack = self.prev;
+        assert!(*self.base.stack == self as *mut _ as usize as _);
+        *self.base.stack = self.base.prev;
     }
 }
 

@@ -4,89 +4,135 @@
 
 use crate::jsapi::JS;
 use crate::jsapi::{jsid, JSFunction, JSObject, JSScript, JSString, JSTracer};
+use crate::glue::CallPropertyDescriptorTracer;
 
 use crate::jsid::VoidId;
 use std::cell::UnsafeCell;
-use std::ffi::c_void;
+use std::ffi::{c_char, c_void};
 use std::mem;
 use std::ptr;
 
 /// A trait for JS types that can be registered as roots.
 pub trait RootKind {
-    #[allow(non_snake_case)]
-    /// Returns the rooting kind for `Self`.
-    fn rootKind() -> JS::RootKind;
+    type Vtable;
+    const VTABLE: Self::Vtable;
+    const KIND: JS::RootKind;
 }
 
 impl RootKind for *mut JSObject {
-    #[inline(always)]
-    fn rootKind() -> JS::RootKind {
-        JS::RootKind::Object
-    }
+    type Vtable = ();
+    const VTABLE: Self::Vtable = ();
+    const KIND: JS::RootKind = JS::RootKind::Object;
 }
 
 impl RootKind for *mut JSFunction {
-    #[inline(always)]
-    fn rootKind() -> JS::RootKind {
-        JS::RootKind::Object
-    }
+    type Vtable = ();
+    const VTABLE: Self::Vtable = ();
+    const KIND: JS::RootKind = JS::RootKind::Object;
 }
 
 impl RootKind for *mut JSString {
-    #[inline(always)]
-    fn rootKind() -> JS::RootKind {
-        JS::RootKind::String
-    }
+    type Vtable = ();
+    const VTABLE: Self::Vtable = ();
+    const KIND: JS::RootKind = JS::RootKind::String;
 }
 
 impl RootKind for *mut JS::Symbol {
-    #[inline(always)]
-    fn rootKind() -> JS::RootKind {
-        JS::RootKind::Symbol
-    }
+    type Vtable = ();
+    const VTABLE: Self::Vtable = ();
+    const KIND: JS::RootKind = JS::RootKind::Symbol;
 }
 
 impl RootKind for *mut JS::BigInt {
-    #[inline(always)]
-    fn rootKind() -> JS::RootKind {
-        JS::RootKind::BigInt
-    }
+    type Vtable = ();
+    const VTABLE: Self::Vtable = ();
+    const KIND: JS::RootKind = JS::RootKind::BigInt;
 }
 
 impl RootKind for *mut JSScript {
-    #[inline(always)]
-    fn rootKind() -> JS::RootKind {
-        JS::RootKind::Script
-    }
+    type Vtable = ();
+    const VTABLE: Self::Vtable = ();
+    const KIND: JS::RootKind = JS::RootKind::Script;
 }
 
 impl RootKind for jsid {
-    #[inline(always)]
-    fn rootKind() -> JS::RootKind {
-        JS::RootKind::Id
-    }
+    type Vtable = ();
+    const VTABLE: Self::Vtable = ();
+    const KIND: JS::RootKind = JS::RootKind::Id;
 }
 
 impl RootKind for JS::Value {
-    #[inline(always)]
-    fn rootKind() -> JS::RootKind {
-        JS::RootKind::Value
-    }
+    type Vtable = ();
+    const VTABLE: Self::Vtable = ();
+    const KIND: JS::RootKind = JS::RootKind::Value;
 }
 
 impl RootKind for JS::PropertyDescriptor {
-    #[inline(always)]
-    fn rootKind() -> JS::RootKind {
-        JS::RootKind::Traceable
+    type Vtable = *const RootedVFTable;
+    const VTABLE: Self::Vtable = &<Self as TraceableTrace>::vftable;
+    const KIND: JS::RootKind = JS::RootKind::Traceable;
+}
+
+/// A vtable for use in RootedTraceable<T>, which must be present for stack roots using
+/// RootKind::Traceable. The C++ tracing implementation uses a virtual trace function
+/// which is only present for C++ Rooted<T> values that use the Traceable root kind.
+#[repr(C)]
+pub struct RootedVFTable {
+    #[cfg(windows)]
+    pub padding: [usize; 1],
+    #[cfg(not(windows))]
+    pub padding: [usize; 2],
+    pub trace: unsafe extern "C" fn(this: *mut c_void, trc: *mut JSTracer, name: *const c_char),
+}
+
+impl RootedVFTable {
+    #[cfg(windows)]
+    pub const PADDING: [usize; 1] = [0];
+    #[cfg(not(windows))]
+    pub const PADDING: [usize; 2] = [0, 0];
+}
+
+/// `Rooted<T>` with a T that uses the Traceable RootKind uses dynamic dispatch on the C++ side
+/// for custom tracing, so provide trace logic via vftable when creating a Rust instane of the object.
+pub unsafe trait TraceableTrace: Sized + RootKind {
+    const vftable: RootedVFTable = RootedVFTable {
+        padding: RootedVFTable::PADDING,
+        trace: Self::trace,
+    };
+
+    unsafe extern "C" fn trace(this: *mut c_void, trc: *mut JSTracer, _name: *const c_char) {
+        let rooted = this as *mut Rooted<Self>;
+        let rooted = rooted.as_mut().unwrap();
+        Self::do_trace(&mut rooted.ptr, trc);
     }
+
+    /// Used by `TraceableTrace` implementer to trace its contents.
+    /// Corresponds to virtual `trace` call in a `Rooted` that inherits from
+    /// StackRootedTraceableBase (C++).
+    fn do_trace(&mut self, trc: *mut JSTracer);
+}
+
+unsafe impl TraceableTrace for JS::PropertyDescriptor {
+    fn do_trace(&mut self, trc: *mut JSTracer) {
+        unsafe {
+            CallPropertyDescriptorTracer(trc, self);
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct RootedBase {
+    pub stack: *mut *mut Rooted<*mut JSObject>,
+    pub prev: *mut Rooted<*mut JSObject>,
 }
 
 // Annoyingly, bindgen can't cope with SM's use of templates, so we have to roll our own.
 #[repr(C)]
 #[derive(Debug)]
-pub struct Rooted<T> {
-    pub stack: *mut *mut Rooted<*mut c_void>,
-    pub prev: *mut Rooted<*mut c_void>,
+pub struct Rooted<T: RootKind> {
+    pub vtable: T::Vtable,
+    pub base: RootedBase,
     pub ptr: T,
 }
 
@@ -214,9 +260,10 @@ impl<const N: usize> ValueArray<N> {
 }
 
 impl<const N: usize> RootKind for ValueArray<N> {
-    fn rootKind() -> JS::RootKind {
-        JS::RootKind::Traceable
-    }
+    //XXXjdm
+    type Vtable = ();
+    const VTABLE: () = ();
+    const KIND: JS::RootKind = JS::RootKind::Traceable;
 }
 
 impl<const N: usize> GCMethods for ValueArray<N> {
