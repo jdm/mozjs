@@ -383,6 +383,33 @@ impl JSNativeWrapper {
     }
 }
 
+impl RootedBase {
+    pub unsafe fn add_to_root_stack(&mut self, cx: *mut JSContext, kind: JS::RootKind)
+    {
+        let stack = Self::get_root_stack(cx, kind);
+        self.stack = stack;
+        self.prev = *stack;
+
+        *stack = self as *mut _ as usize as _;
+    }
+
+    pub unsafe fn remove_from_root_stack(&mut self) {
+        assert!(*self.stack == self as *mut _ as usize as _);
+        *self.stack = self.prev;
+    }
+
+    unsafe fn get_root_stack(cx: *mut JSContext, kind: JS::RootKind) -> *mut *mut JS::Rooted<*mut JSObject>
+    {
+        let kind = kind as usize;
+        let rooting_cx = Self::get_rooting_context(cx);
+        &mut (*rooting_cx).stackRoots_[kind] as *mut _ as *mut _
+    }
+
+    unsafe fn get_rooting_context(cx: *mut JSContext) -> *mut JS::RootingContext {
+        cx as *mut JS::RootingContext
+    }
+}
+
 impl<T: RootKind> JS::Rooted<T> {
     pub fn new_unrooted() -> JS::Rooted<T> {
         JS::Rooted {
@@ -395,29 +422,12 @@ impl<T: RootKind> JS::Rooted<T> {
         }
     }
 
-    unsafe fn get_rooting_context(cx: *mut JSContext) -> *mut JS::RootingContext {
-        cx as *mut JS::RootingContext
-    }
-
-    unsafe fn get_root_stack(cx: *mut JSContext) -> *mut *mut JS::Rooted<*mut JSObject>
-    {
-        let kind = T::KIND as usize;
-        let rooting_cx = Self::get_rooting_context(cx);
-        &mut (*rooting_cx).stackRoots_[kind] as *mut _ as *mut _
-    }
-
-    pub unsafe fn add_to_root_stack(&mut self, cx: *mut JSContext)
-    {
-        let stack = Self::get_root_stack(cx);
-        self.base.stack = stack;
-        self.base.prev = *stack;
-
-        *stack = self as *mut _ as usize as _;
+    pub unsafe fn add_to_root_stack(&mut self, cx: *mut JSContext) {
+        self.base.add_to_root_stack(cx, T::KIND)
     }
 
     pub unsafe fn remove_from_root_stack(&mut self) {
-        assert!(*self.base.stack == self as *mut _ as usize as _);
-        *self.base.stack = self.base.prev;
+        self.base.remove_from_root_stack()
     }
 }
 
