@@ -386,7 +386,7 @@ impl JSNativeWrapper {
 impl<T: RootKind> JS::Rooted<T> {
     pub fn new_unrooted() -> JS::Rooted<T> {
         JS::Rooted {
-            vtable: T::VTABLE,
+            vtable: T::vtable(),
             base: RootedBase {
                 stack: ptr::null_mut(),
                 prev: ptr::null_mut(),

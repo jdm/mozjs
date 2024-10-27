@@ -15,61 +15,86 @@ use std::ptr;
 /// A trait for JS types that can be registered as roots.
 pub trait RootKind {
     type Vtable;
-    const VTABLE: Self::Vtable;
+    //const VTABLE: Self::Vtable;
+    fn vtable() -> Self::Vtable;
     const KIND: JS::RootKind;
 }
 
 impl RootKind for *mut JSObject {
     type Vtable = ();
-    const VTABLE: Self::Vtable = ();
+    //const VTABLE: Self::Vtable = ();
+    fn vtable() -> Self::Vtable { () }
     const KIND: JS::RootKind = JS::RootKind::Object;
 }
 
 impl RootKind for *mut JSFunction {
     type Vtable = ();
-    const VTABLE: Self::Vtable = ();
+    //const VTABLE: Self::Vtable = ();
+    fn vtable() -> Self::Vtable { () }
     const KIND: JS::RootKind = JS::RootKind::Object;
 }
 
 impl RootKind for *mut JSString {
     type Vtable = ();
-    const VTABLE: Self::Vtable = ();
+    //const VTABLE: Self::Vtable = ();
+    fn vtable() -> Self::Vtable { () }
     const KIND: JS::RootKind = JS::RootKind::String;
 }
 
 impl RootKind for *mut JS::Symbol {
     type Vtable = ();
-    const VTABLE: Self::Vtable = ();
+    //const VTABLE: Self::Vtable = ();
+    fn vtable() -> Self::Vtable { () }
     const KIND: JS::RootKind = JS::RootKind::Symbol;
 }
 
 impl RootKind for *mut JS::BigInt {
     type Vtable = ();
-    const VTABLE: Self::Vtable = ();
+    //const VTABLE: Self::Vtable = ();
+    fn vtable() -> Self::Vtable { () }
     const KIND: JS::RootKind = JS::RootKind::BigInt;
 }
 
 impl RootKind for *mut JSScript {
     type Vtable = ();
-    const VTABLE: Self::Vtable = ();
+    //const VTABLE: Self::Vtable = ();
+    fn vtable() -> Self::Vtable { () }
     const KIND: JS::RootKind = JS::RootKind::Script;
 }
 
 impl RootKind for jsid {
     type Vtable = ();
-    const VTABLE: Self::Vtable = ();
+    //const VTABLE: Self::Vtable = ();
+    fn vtable() -> Self::Vtable { () }
     const KIND: JS::RootKind = JS::RootKind::Id;
 }
 
 impl RootKind for JS::Value {
     type Vtable = ();
-    const VTABLE: Self::Vtable = ();
+    //const VTABLE: Self::Vtable = ();
+    fn vtable() -> Self::Vtable { () }
     const KIND: JS::RootKind = JS::RootKind::Value;
+}
+
+mod prop_desc {
+    use super::*;
+
+    pub static vftable: RootedVFTable = RootedVFTable {
+        padding: RootedVFTable::PADDING,
+        trace,
+    };
+
+    pub unsafe extern "C" fn trace(this: *mut c_void, trc: *mut JSTracer, _name: *const c_char) {
+        let rooted = this as *mut Rooted<JS::PropertyDescriptor>;
+        let rooted = rooted.as_mut().unwrap();
+        CallPropertyDescriptorTracer(trc, &mut rooted.ptr);
+    }
 }
 
 impl RootKind for JS::PropertyDescriptor {
     type Vtable = *const RootedVFTable;
-    const VTABLE: Self::Vtable = &<Self as TraceableTrace>::vftable;
+    //const VTABLE: Self::Vtable = std::ptr::addr_of!(prop_desc::vftable);
+    fn vtable() -> Self::Vtable { std::ptr::addr_of!(prop_desc::vftable) }
     const KIND: JS::RootKind = JS::RootKind::Traceable;
 }
 
@@ -92,7 +117,7 @@ impl RootedVFTable {
     pub const PADDING: [usize; 2] = [0, 0];
 }
 
-/// `Rooted<T>` with a T that uses the Traceable RootKind uses dynamic dispatch on the C++ side
+/*/// `Rooted<T>` with a T that uses the Traceable RootKind uses dynamic dispatch on the C++ side
 /// for custom tracing, so provide trace logic via vftable when creating a Rust instane of the object.
 pub unsafe trait TraceableTrace: Sized + RootKind {
     const vftable: RootedVFTable = RootedVFTable {
@@ -118,7 +143,7 @@ unsafe impl TraceableTrace for JS::PropertyDescriptor {
             CallPropertyDescriptorTracer(trc, self);
         }
     }
-}
+}*/
 
 #[repr(C)]
 #[derive(Debug)]
@@ -262,7 +287,8 @@ impl<const N: usize> ValueArray<N> {
 impl<const N: usize> RootKind for ValueArray<N> {
     //XXXjdm
     type Vtable = ();
-    const VTABLE: () = ();
+    //const VTABLE: () = ();
+    fn vtable() -> Self::Vtable { () }
     const KIND: JS::RootKind = JS::RootKind::Traceable;
 }
 
