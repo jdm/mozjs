@@ -88,6 +88,7 @@ impl JSObjectStorage for Box<Heap<*mut JSObject>> {
     fn as_raw(&self) -> *mut JSObject {
         self.get()
     }
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     fn from_raw(raw: *mut JSObject) -> Self {
         let boxed = Box::new(Heap::default());
         boxed.set(raw);
@@ -97,6 +98,7 @@ impl JSObjectStorage for Box<Heap<*mut JSObject>> {
 
 impl<T: TypedArrayElement, S: JSObjectStorage> FromJSValConvertible for TypedArray<T, S> {
     type Config = ();
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     unsafe fn from_jsval(
         _cx: *mut JSContext,
         value: HandleValue,
@@ -123,6 +125,7 @@ pub enum CreateWith<'a, T: 'a> {
 }
 
 /// A typed array wrapper.
+#[cfg_attr(feature = "crown", crown::unrooted_must_root_lint::must_root)]
 pub struct TypedArray<T: TypedArrayElement, S: JSObjectStorage> {
     object: S,
     computed: Cell<Option<(*mut T::Element, usize)>>,
@@ -141,6 +144,7 @@ impl<T: TypedArrayElement, S: JSObjectStorage> TypedArray<T, S> {
     /// Create a typed array representation that wraps an existing JS reflector.
     /// This operation will fail if attempted on a JS object that does not match
     /// the expected typed array details.
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     pub fn from(object: *mut JSObject) -> Result<Self, ()> {
         if object.is_null() {
             return Err(());

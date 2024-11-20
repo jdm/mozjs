@@ -228,6 +228,7 @@ impl ToJSValConvertible for () {
 
 impl FromJSValConvertible for JSVal {
     type Config = ();
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     unsafe fn from_jsval(
         _cx: *mut JSContext,
         value: HandleValue,

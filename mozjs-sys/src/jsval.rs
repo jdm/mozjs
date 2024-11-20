@@ -79,39 +79,46 @@ enum ValueShiftedTag {
 const JSVAL_PAYLOAD_MASK: u64 = 0x00007FFFFFFFFFFF;
 
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 fn AsJSVal(val: u64) -> JSVal {
     JSVal { asBits_: val }
 }
 
 #[cfg(target_pointer_width = "64")]
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 fn BuildJSVal(tag: ValueTag, payload: u64) -> JSVal {
     AsJSVal(((tag as u32 as u64) << JSVAL_TAG_SHIFT) | payload)
 }
 
 #[cfg(target_pointer_width = "32")]
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 fn BuildJSVal(tag: ValueTag, payload: u64) -> JSVal {
     AsJSVal(((tag as u32 as u64) << 32) | payload)
 }
 
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn NullValue() -> JSVal {
     BuildJSVal(ValueTag::NULL, 0)
 }
 
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn UndefinedValue() -> JSVal {
     BuildJSVal(ValueTag::UNDEFINED, 0)
 }
 
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn Int32Value(i: i32) -> JSVal {
     BuildJSVal(ValueTag::INT32, i as u32 as u64)
 }
 
 #[cfg(target_pointer_width = "64")]
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn DoubleValue(f: f64) -> JSVal {
     let bits: u64 = unsafe { mem::transmute(f) };
     assert!(bits <= ValueShiftedTag::MAX_DOUBLE as u64);
@@ -120,6 +127,7 @@ pub fn DoubleValue(f: f64) -> JSVal {
 
 #[cfg(target_pointer_width = "32")]
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn DoubleValue(f: f64) -> JSVal {
     let bits: u64 = unsafe { mem::transmute(f) };
     let val = AsJSVal(bits);
@@ -128,6 +136,7 @@ pub fn DoubleValue(f: f64) -> JSVal {
 }
 
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn UInt32Value(ui: u32) -> JSVal {
     if ui > 0x7fffffff {
         DoubleValue(ui as f64)
@@ -138,6 +147,7 @@ pub fn UInt32Value(ui: u32) -> JSVal {
 
 #[cfg(target_pointer_width = "64")]
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn StringValue(s: &JSString) -> JSVal {
     let bits = s as *const JSString as usize as u64;
     assert!((bits >> JSVAL_TAG_SHIFT) == 0);
@@ -146,18 +156,21 @@ pub fn StringValue(s: &JSString) -> JSVal {
 
 #[cfg(target_pointer_width = "32")]
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn StringValue(s: &JSString) -> JSVal {
     let bits = s as *const JSString as usize as u64;
     BuildJSVal(ValueTag::STRING, bits)
 }
 
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn BooleanValue(b: bool) -> JSVal {
     BuildJSVal(ValueTag::BOOLEAN, b as u64)
 }
 
 #[cfg(target_pointer_width = "64")]
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn ObjectValue(o: *mut JSObject) -> JSVal {
     let bits = o as usize as u64;
     assert!((bits >> JSVAL_TAG_SHIFT) == 0);
@@ -166,12 +179,14 @@ pub fn ObjectValue(o: *mut JSObject) -> JSVal {
 
 #[cfg(target_pointer_width = "32")]
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn ObjectValue(o: *mut JSObject) -> JSVal {
     let bits = o as usize as u64;
     BuildJSVal(ValueTag::OBJECT, bits)
 }
 
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn ObjectOrNullValue(o: *mut JSObject) -> JSVal {
     if o.is_null() {
         NullValue()
@@ -182,6 +197,7 @@ pub fn ObjectOrNullValue(o: *mut JSObject) -> JSVal {
 
 #[cfg(target_pointer_width = "64")]
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn SymbolValue(s: &Symbol) -> JSVal {
     let bits = s as *const Symbol as usize as u64;
     assert!((bits >> JSVAL_TAG_SHIFT) == 0);
@@ -190,6 +206,7 @@ pub fn SymbolValue(s: &Symbol) -> JSVal {
 
 #[cfg(target_pointer_width = "32")]
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn SymbolValue(s: &Symbol) -> JSVal {
     let bits = s as *const Symbol as usize as u64;
     BuildJSVal(ValueTag::SYMBOL, bits)
@@ -197,6 +214,7 @@ pub fn SymbolValue(s: &Symbol) -> JSVal {
 
 #[cfg(target_pointer_width = "64")]
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn BigIntValue(s: &BigInt) -> JSVal {
     let bits = s as *const BigInt as usize as u64;
     assert!((bits >> JSVAL_TAG_SHIFT) == 0);
@@ -205,12 +223,14 @@ pub fn BigIntValue(s: &BigInt) -> JSVal {
 
 #[cfg(target_pointer_width = "32")]
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn BigIntValue(s: &BigInt) -> JSVal {
     let bits = s as *const BigInt as usize as u64;
     BuildJSVal(ValueTag::BIGINT, bits)
 }
 
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub fn PrivateValue(o: *const c_void) -> JSVal {
     let ptrBits = o as usize as u64;
     #[cfg(target_pointer_width = "64")]
@@ -544,6 +564,7 @@ impl JSVal {
 }
 
 impl Default for JSVal {
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     fn default() -> JSVal {
         UndefinedValue()
     }
@@ -555,6 +576,7 @@ pub unsafe fn JS_ARGV(_cx: *mut JSContext, vp: *mut JSVal) -> *mut JSVal {
 }
 
 #[inline(always)]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub unsafe fn JS_CALLEE(_cx: *mut JSContext, vp: *mut JSVal) -> JSVal {
     *vp
 }

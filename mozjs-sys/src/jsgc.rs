@@ -136,6 +136,7 @@ pub struct RootedBase {
 // Annoyingly, bindgen can't cope with SM's use of templates, so we have to roll our own.
 #[repr(C)]
 #[derive(Debug)]
+#[cfg_attr(feature = "crown", crown::unrooted_must_root_lint::allow_unrooted_interior)]
 pub struct Rooted<T: RootKind> {
     pub vtable: T::Vtable,
     pub base: RootedBase,
@@ -217,18 +218,22 @@ impl GCMethods for jsid {
 }
 
 impl GCMethods for JS::Value {
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     unsafe fn initial() -> JS::Value {
         JS::Value::default()
     }
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     unsafe fn post_barrier(v: *mut JS::Value, prev: JS::Value, next: JS::Value) {
         JS::HeapValueWriteBarriers(v, &prev, &next);
     }
 }
 
 impl GCMethods for JS::PropertyDescriptor {
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     unsafe fn initial() -> JS::PropertyDescriptor {
         JS::PropertyDescriptor::default()
     }
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     unsafe fn post_barrier(
         _: *mut JS::PropertyDescriptor,
         _: JS::PropertyDescriptor,
@@ -240,11 +245,13 @@ impl GCMethods for JS::PropertyDescriptor {
 /// A fixed-size array of values, for use inside Rooted<>.
 ///
 /// https://searchfox.org/mozilla-central/source/js/public/ValueArray.h#31
+#[cfg_attr(feature = "crown", crown::unrooted_must_root_lint::must_root)]
 pub struct ValueArray<const N: usize> {
     elements: [JS::Value; N],
 }
 
 impl<const N: usize> ValueArray<N> {
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     pub fn new(elements: [JS::Value; N]) -> Self {
         Self { elements }
     }
@@ -272,11 +279,13 @@ unsafe impl<const N: usize> TraceableTrace for ValueArray<N> {
 }
 
 impl<const N: usize> GCMethods for ValueArray<N> {
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     unsafe fn initial() -> Self {
         Self {
             elements: [JS::Value::initial(); N],
         }
     }
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     unsafe fn post_barrier(_: *mut Self, _: Self, _: Self) {}
 }
 
@@ -299,6 +308,7 @@ pub type RootedValueArray<const N: usize> = Rooted<ValueArray<N>>;
 /// For safe `Heap` construction with value see `Heap::boxed` function.
 #[repr(C)]
 #[derive(Debug)]
+#[cfg_attr(feature = "crown", crown::unrooted_must_root_lint::must_root)]
 pub struct Heap<T: GCMethods + Copy> {
     pub ptr: UnsafeCell<T>,
 }
@@ -311,6 +321,7 @@ impl<T: GCMethods + Copy> Heap<T> {
     ///
     /// Using boxed Heap value guarantees that the underlying Heap value will
     /// not be moved when constructed.
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     pub fn boxed(v: T) -> Box<Heap<T>>
     where
         Heap<T>: Default,
@@ -359,6 +370,7 @@ impl<T> Default for Heap<*mut T>
 where
     *mut T: GCMethods + Copy,
 {
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     fn default() -> Heap<*mut T> {
         Heap {
             ptr: UnsafeCell::new(ptr::null_mut()),
@@ -367,6 +379,7 @@ where
 }
 
 impl Default for Heap<JS::Value> {
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     fn default() -> Heap<JS::Value> {
         Heap {
             ptr: UnsafeCell::new(JS::Value::default()),

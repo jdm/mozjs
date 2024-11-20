@@ -51,6 +51,7 @@ unsafe impl<T: CustomTrace> CustomTrace for Vec<T> {
 // This structure reimplements a C++ class that uses virtual dispatch, so
 // use C layout to guarantee that vftable in CustomAutoRooter is in right place.
 #[repr(C)]
+#[cfg_attr(feature = "crown", crown::unrooted_must_root_lint::allow_unrooted_interior)]
 pub struct CustomAutoRooter<T> {
     _base: jsapi::CustomAutoRooter,
     data: T,
@@ -114,6 +115,7 @@ impl<T: CustomTrace> CustomAutoRooter<T> {
 /// DerefMut implementations.
 /// This structure is created by `root` method on `CustomAutoRooter` or
 /// by the `auto_root!` macro.
+#[cfg_attr(feature = "crown", crown::unrooted_must_root_lint::allow_unrooted_interior)]
 pub struct CustomAutoRooterGuard<'a, T: 'a + CustomTrace> {
     rooter: &'a mut CustomAutoRooter<T>,
 }

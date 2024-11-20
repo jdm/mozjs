@@ -59,6 +59,7 @@ impl Default for jsid {
 }
 
 impl Default for JS::PropertyDescriptor {
+    #[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
     fn default() -> Self {
         JS::PropertyDescriptor {
             _bitfield_align_1: [],

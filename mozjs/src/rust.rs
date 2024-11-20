@@ -570,6 +570,7 @@ impl Stencil {
 // Fast inline converters
 
 #[inline]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub unsafe fn ToBoolean(v: HandleValue) -> bool {
     let val = *v.ptr;
 
@@ -598,6 +599,7 @@ pub unsafe fn ToBoolean(v: HandleValue) -> bool {
 }
 
 #[inline]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub unsafe fn ToNumber(cx: *mut JSContext, v: HandleValue) -> Result<f64, ()> {
     let val = *v.ptr;
     if val.is_number() {
@@ -613,6 +615,7 @@ pub unsafe fn ToNumber(cx: *mut JSContext, v: HandleValue) -> Result<f64, ()> {
 }
 
 #[inline]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 unsafe fn convert_from_int32<T: Default + Copy>(
     cx: *mut JSContext,
     v: HandleValue,
@@ -660,6 +663,7 @@ pub unsafe fn ToUint64(cx: *mut JSContext, v: HandleValue) -> Result<u64, ()> {
 }
 
 #[inline]
+#[cfg_attr(feature = "crown", allow(crown::unrooted_must_root))]
 pub unsafe fn ToString(cx: *mut JSContext, v: HandleValue) -> *mut JSString {
     let val = *v.ptr;
     if val.is_string() {

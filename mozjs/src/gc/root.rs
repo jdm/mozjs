@@ -14,6 +14,7 @@ use mozjs_sys::jsgc::IntoMutableHandle as IntoRawMutableHandle;
 /// Rust API for keeping a Rooted value in the context's root stack.
 /// Example usage: `rooted!(in(cx) let x = UndefinedValue());`.
 /// `RootedGuard::new` also works, but the macro is preferred.
+#[cfg_attr(feature = "crown", crown::unrooted_must_root_lint::allow_unrooted_interior)]
 pub struct RootedGuard<'a, T: 'a + RootKind + GCMethods> {
     root: &'a mut Rooted<T>,
 }
@@ -70,11 +71,13 @@ impl<'a, T: 'a + RootKind + GCMethods> Drop for RootedGuard<'a, T> {
 }
 
 #[derive(Clone, Copy)]
+#[cfg_attr(feature = "crown", crown::unrooted_must_root_lint::allow_unrooted_interior)]
 pub struct Handle<'a, T: 'a> {
     pub(crate) ptr: &'a T,
 }
 
 #[derive(Copy, Clone)]
+#[cfg_attr(feature = "crown", crown::unrooted_must_root_lint::allow_unrooted_interior)]
 pub struct MutableHandle<'a, T: 'a> {
     pub(crate) ptr: *mut T,
     anchor: PhantomData<&'a mut T>,

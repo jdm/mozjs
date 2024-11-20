@@ -397,6 +397,21 @@ fn build_jsapi(build_dir: &Path) {
         .compile("jsapi");
 }
 
+#[derive(Debug)]
+struct ParseCallback;
+
+impl bindgen::callbacks::ParseCallbacks for ParseCallback {
+    fn add_attributes(&self, info: &bindgen::callbacks::AttributeInfo) -> Vec<String> {
+        if info.name == "Value" || info.name == "ExpandoAndGeneration" || info.name == "PropertyDescriptor" || info.name == "ProxyValueArray" || info.name == "ProxyReservedSlots" {
+            vec!["#[cfg_attr(feature = \"crown\", crown::unrooted_must_root_lint::must_root)]".into()]
+        } else if info.name == "Handle" || info.name == "MutableHandle"  {
+            vec!["#[cfg_attr(feature = \"crown\", crown::unrooted_must_root_lint::allow_unrooted_interior)]".into()]            
+        } else {
+            vec![]
+        }
+    }
+}
+
 /// Invoke bindgen on the JSAPI headers to produce raw FFI bindings for use from
 /// Rust.
 ///
@@ -496,6 +511,8 @@ fn build_jsapi_bindings(build_dir: &Path) {
     for &(module, raw_line) in MODULE_RAW_LINES {
         builder = builder.module_raw_line(module, raw_line);
     }
+
+    builder = builder.parse_callbacks(Box::new(ParseCallback));
 
     let bindings = builder
         .generate()
